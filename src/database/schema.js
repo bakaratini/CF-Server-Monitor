@@ -177,21 +177,21 @@ const AGGREGATE_PHASES = [
     minHours: 1,
     maxHours: 3,
     bucketSeconds: 240,
-    sourceBucketSeconds: null
+    sourceBucketSeconds: 120  // ✅ 从2分钟桶聚合
   },
   {
     name: '3-6小时(8分钟桶)',
     minHours: 3,
     maxHours: 6,
     bucketSeconds: 480,
-    sourceBucketSeconds: null
+    sourceBucketSeconds: 240  // ✅ 从4分钟桶聚合
   },
   {
     name: '6-24小时(16分钟桶)',
     minHours: 6,
     maxHours: 24,
     bucketSeconds: 960,
-    sourceBucketSeconds: null
+    sourceBucketSeconds: 480  // ✅ 从8分钟桶聚合
   }
 ];
 
