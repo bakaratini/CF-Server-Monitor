@@ -55,7 +55,6 @@ CF-Server-Monitor/
 │   ├── services/
 │   │   └── notification.js     # 通知服务
 │   ├── utils/
-│   │   ├── format.js           # 格式化工具
 │   │   └── settings.js         # 设置管理
 │   └── frontend/               # Vue 3 前端应用
 │       ├── components/         # Vue 组件
