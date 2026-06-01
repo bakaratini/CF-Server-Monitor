@@ -1,5 +1,6 @@
 #!/bin/bash
 # ==============================================================================
+# V1.0.1
 # CF-Server-Monitor-Pro 安装/卸载脚本 (企业级安全加固版)
 # 支持: Ubuntu/Debian/CentOS/RHEL/Fedora/Rocky/AlmaLinux
 # Fixes: 1. 独立协程无 wait 阻塞 2. 原子化原子覆盖 3. 兼容全版本 Systemd 4. 严格 set -u 闭环
@@ -55,7 +56,7 @@ detect_os() {
 
 install_deps() {
     step "检查系统依赖组件..."
-    local required_cmds=("curl" "awk" "grep" "sed")
+    local required_cmds=("curl" "awk" "grep" "sed" "ps" "df")
     
     for cmd in "${required_cmds[@]}"; do
         if ! command -v "$cmd" >/dev/null 2>&1; then
@@ -140,41 +141,31 @@ get_tcp_ping() {
     local host="$1"
     local port="${2:-443}"
 
-    # fallback：秒级时间（保证跨平台）
-    local start_sec end_sec start_ns end_ns
+    local start_ms=0
+    local end_ms=0
 
-    # 记录开始时间（优先纳秒，否则秒）
-    if start_ns=$(date +%s%N 2>/dev/null); then
-        :
+    start_ms=$(date +%s 2>/dev/null || echo 0)
+
+    if command -v timeout >/dev/null 2>&1; then
+        timeout 5 bash -c "exec 3<>/dev/tcp/${host}/${port}" >/dev/null 2>&1
     else
-        start_sec=$(date +%s)
+        bash -c "exec 3<>/dev/tcp/${host}/${port}" >/dev/null 2>&1
     fi
 
-    # 执行 TCP connect
-    if ! timeout 5 bash -c "exec 3<>/dev/tcp/${host}/${port}" >/dev/null 2>&1; then
-        echo -1
+    local ret=$?
+
+    end_ms=$(date +%s 2>/dev/null || echo 0)
+
+    if [ "$ret" -ne 0 ]; then
+        echo "-1"
         return
     fi
 
-    # 记录结束时间
-    if end_ns=$(date +%s%N 2>/dev/null); then
-        :
-    else
-        end_sec=$(date +%s)
-    fi
-
-    # 计算延迟（自动适配）
-    if [[ -n "$start_ns" && -n "$end_ns" ]]; then
-        # 纳秒 -> 毫秒（浮点避免 0ms）
-        awk -v s="$start_ns" -v e="$end_ns" 'BEGIN {
-            printf "%.3f\n", (e - s) / 1000000
-        }'
-    else
-        # 秒级 fallback（避免 0）
-        awk -v s="$start_sec" -v e="$end_sec" 'BEGIN {
-            printf "%.3f\n", (e - s) * 1000
-        }'
-    fi
+    awk -v s="$start_ms" -v e="$end_ms" 'BEGIN{
+        d=(e-s)*1000
+        if(d<0)d=0
+        printf "%.0f\n", d
+    }'
 }
 
 # 静态测试节点定义
@@ -290,7 +281,15 @@ while true; do
     fi
     OS=${OS_RAW:-"Linux"}
     ARCH=$(uname -m)
-    BOOT_TIME=$(($(date -d "$(uptime -s 2>/dev/null)" +%s 2>/dev/null || echo 0) * 1000))
+    BOOT_TIME=$(
+    awk '
+    $1=="btime"{
+        print $2 * 1000
+        exit
+    }
+    ' /proc/stat 2>/dev/null
+    )
+    BOOT_TIME=${BOOT_TIME:-0}
     CPU_INFO=$(grep -m 1 'model name' /proc/cpuinfo 2>/dev/null | awk -F: '{print $2}' | xargs || echo "")
     [ -z "${CPU_INFO}" ] && CPU_INFO=${ARCH}
     CPU_CORES=$(nproc 2>/dev/null || grep -c '^processor' /proc/cpuinfo 2>/dev/null || echo "1")

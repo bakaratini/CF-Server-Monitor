@@ -876,9 +876,9 @@ const init = async () => {
     const fetchedConfig = await fetchConfig()
     if (fetchedConfig) {
       config.value = fetchedConfig
-      // 如果启用了短数据保留，默认设置为 0.5 小时
+      // 如果启用了短数据保留，默认设置为 0.167 小时
       if (!fetchedConfig.enableLongRetention) {
-        currentHours.value = 0.5
+        currentHours.value = 0.167
       }
     }
   } catch (e) {
