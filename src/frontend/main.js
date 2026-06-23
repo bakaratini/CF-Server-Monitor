@@ -4,8 +4,7 @@ import router from './router'
 import './styles/main.css'
 import './styles/light.css'
 import { currentLang, translations } from './utils/i18n'
-
-const API_BASE = window.location.origin
+import { http } from './utils/http'
 
 const getTranslation = () => {
   const lang = localStorage.getItem('language_preference') || 'en'
@@ -16,9 +15,9 @@ const trans = () => getTranslation()
 
 async function fetchConfig() {
   try {
-    const res = await fetch(`${API_BASE}/api/config`)
-    if (res.ok) {
-      return await res.json()
+    const result = await http.get('/api/config', { includeAuth: false, includeTurnstile: false })
+    if (!result.error) {
+      return result.data
     }
   } catch (e) {
     console.error('Failed to fetch config:', e)
@@ -55,12 +54,9 @@ async function verifyTurnstile(siteKey) {
       callback: async (token) => {
         localStorage.setItem('turnstile_token', token)
         try {
-          const res = await fetch(`${API_BASE}/api/config`, {
-            headers: { 'X-Turnstile-Token': token }
-          })
-          if (res.ok) {
-            const data = await res.json()
-            resolve(data && data.cookie_auth === true)
+          const result = await http.get('/api/config', { includeAuth: false, includeTurnstile: true })
+          if (!result.error) {
+            resolve(result.data && result.data.cookie_auth === true)
           } else {
             resolve(false)
           }

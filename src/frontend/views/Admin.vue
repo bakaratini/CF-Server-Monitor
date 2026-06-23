@@ -837,6 +837,7 @@ import Footer from '../components/Footer.vue'
 import { adminApi, login, logout as apiLogout, formatBytes, upgradeDatabase, rebuildDatabase, getFlagCountryCode } from '../utils/api'
 import { t, currentLang } from '../utils/i18n'
 import { translations } from '../utils/i18n'
+import { http } from '../utils/http'
 
 const API_BASE = window.location.origin
 
@@ -975,8 +976,8 @@ const handleLogin = async () => {
       return
     }
     
-    const res = await login(loginForm.value.username, loginForm.value.password, turnstileToken.value)
-    if (res.ok) {
+    const result = await login(loginForm.value.username, loginForm.value.password, turnstileToken.value)
+    if (!result.error) {
       isLoggedIn.value = true
       if (turnstileToken.value) {
         localStorage.setItem('turnstile_token', turnstileToken.value)
@@ -1026,9 +1027,9 @@ const initAdmin = async () => {
 
 const loadTurnstileConfig = async () => {
   try {
-    const res = await fetch(`${API_BASE}/api/config`)
-    if (res.ok) {
-      const config = await res.json()
+    const result = await http.get('/api/config', { includeAuth: false, includeTurnstile: false })
+    if (!result.error) {
+      const config = result.data
       turnstileEnabled.value = config.turnstile_enabled === true || config.turnstile_enabled === 'true'
       turnstileSiteKey.value = config.turnstile_site_key || ''
       
@@ -1075,9 +1076,9 @@ const renderTurnstile = () => {
 
 const loadSettings = async () => {
   try {
-    const res = await adminApi({ action: 'get_settings' })
-    if (res.ok) {
-      const data = await res.json()
+    const result = await adminApi({ action: 'get_settings' })
+    if (!result.error) {
+      const data = result.data
       const settingsData = data.settings || {}
       settings.value = {
         site_title: settingsData.site_title || '',
@@ -1180,10 +1181,9 @@ const saveSettings = async () => {
     }
 
     try {
-      const res = await adminApi(data)
-      const result = await res.json()
-      if (res.ok) {
-        alert(getMessage(result.message) || 'Success')
+      const result = await adminApi(data)
+      if (!result.error) {
+        alert(getMessage(result.data.message) || 'Success')
         location.reload()
       } else {
         alert(result.error || 'Fail')
@@ -1197,9 +1197,9 @@ const saveSettings = async () => {
 
   const loadServers = async () => {
     try {
-      const res = await adminApi({ action: 'list' })
-      if (res.ok) {
-        const data = await res.json()
+      const result = await adminApi({ action: 'list' })
+      if (!result.error) {
+        const data = result.data
         servers.value = data.servers || []
         stats.value = data.stats || { total: servers.value.length, online: 0, offline: servers.value.length, avg_cpu: 0 }
         
@@ -1216,10 +1216,9 @@ const addServer = async () => {
     if (!name) return alert(trans.value.enterServerName)
 
     try {
-      const res = await adminApi({ action: 'add', name, server_group: newServerGroup.value })
-      const result = await res.json()
-      if (res.ok) {
-        alert(getMessage(result.message) || 'Success')
+      const result = await adminApi({ action: 'add', name, server_group: newServerGroup.value })
+      if (!result.error) {
+        alert(getMessage(result.data.message) || 'Success')
         location.reload()
       } else {
         alert(result.error || 'Fail')
@@ -1358,10 +1357,9 @@ const saveEdit = async () => {
     }
 
     try {
-      const res = await adminApi(data)
-      const result = await res.json()
-      if (res.ok) {
-        alert(getMessage(result.message) || 'Success')
+      const result = await adminApi(data)
+      if (!result.error) {
+        alert(getMessage(result.data.message) || 'Success')
         location.reload()
       } else {
         alert(getMessage(result.error) || 'Fail')
@@ -1382,10 +1380,9 @@ const saveEdit = async () => {
 
   const confirmDelete = async () => {
     try {
-      const res = await adminApi({ action: 'delete', id: deleteServerId.value })
-      const result = await res.json()
-      if (res.ok) {
-        alert(getMessage(result.message) || 'Success')
+      const result = await adminApi({ action: 'delete', id: deleteServerId.value })
+      if (!result.error) {
+        alert(getMessage(result.data.message) || 'Success')
         location.reload()
       } else {
         alert(result.error || 'Fail')
@@ -1400,10 +1397,9 @@ const saveEdit = async () => {
     if (!confirm(trans.value.confirmDeleteServers + selectedServers.value.length + trans.value.irreversible)) return
 
     try {
-      const res = await adminApi({ action: 'batch_delete', ids: selectedServers.value })
-      const result = await res.json()
-      if (res.ok) {
-        alert(getMessage(result.message) || 'Success')
+      const result = await adminApi({ action: 'batch_delete', ids: selectedServers.value })
+      if (!result.error) {
+        alert(getMessage(result.data.message) || 'Success')
         location.reload()
       } else {
         alert(result.error || 'Fail')
@@ -1455,8 +1451,8 @@ const getStatusText = (server) => {
     orders.splice(targetIndex, 0, dragged)
     
     try {
-      const res = await adminApi({ action: 'save_order', orders })
-      if (res.ok) {
+      const result = await adminApi({ action: 'save_order', orders })
+      if (!result.error) {
         loadServers()
       }
     } catch (e) {
@@ -1539,10 +1535,9 @@ const queryD1Usage = async () => {
   d1UsageResult.value = null
 
   try {
-    const res = await adminApi({ action: 'd1_usage' })
-    const result = await res.json()
-    if (res.ok) {
-      d1UsageResult.value = result
+    const result = await adminApi({ action: 'd1_usage' })
+    if (!result.error) {
+      d1UsageResult.value = result.data
     } else {
       d1UsageResult.value = { success: false, error: result.error || 'Fail' }
     }

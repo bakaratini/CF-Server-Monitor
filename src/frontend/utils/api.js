@@ -137,55 +137,17 @@ export const fetchAllHistory = async (id, hours) => {
 }
 
 export const adminApi = async (data) => {
-  const headers = {
-    'Content-Type': 'application/json'
-  }
-  const token = localStorage.getItem('jwt_token')
-  if (token) {
-    headers['Authorization'] = 'Bearer ' + token
-  }
-  const turnstileToken = localStorage.getItem('turnstile_token')
-  if (turnstileToken) {
-    headers['X-Turnstile-Token'] = turnstileToken
-  }
-
-  const res = await fetch(`${API_BASE}/admin/api`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(data),
-    credentials: 'include'
-  })
-
-  if (res.status === 401) {
-    localStorage.removeItem('jwt_token')
-    window.location.href = '/admin'
-  }
-
-  return res
+  const result = await http.post('/admin/api', data)
+  return result
 }
 
 export const login = async (username, password, turnstileToken = '') => {
-  const headers = {
-    'Content-Type': 'application/json'
-  }
-  if (turnstileToken) {
-    headers['X-Turnstile-Token'] = turnstileToken
-  }
+  const result = await http.post('/admin/api', { action: 'login', username, password }, { autoRedirect: false })
   
-  const res = await fetch(`${API_BASE}/admin/api`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({ action: 'login', username, password }),
-    credentials: 'include'
-  })
-  
-  if (res.ok) {
-    const data = await res.json()
-    if (data.token) {
-      localStorage.setItem('jwt_token', data.token)
-    }
+  if (!result.error && result.data && result.data.token) {
+    localStorage.setItem('jwt_token', result.data.token)
   }
-  return res
+  return result
 }
 
 export const logout = () => {
