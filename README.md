@@ -255,21 +255,25 @@ curl -sL https://你的项目.你的子域.workers.dev/install-openwrt.sh | sh -
 
 ### Windows 系统安装
 
-对于 Windows 系统，使用 Python 脚本安装探针：
+#### Python 版（带 GUI 界面）
 
-#### 安装依赖
+如需图形界面管理，使用 Python 版本：
+
+##### 安装依赖
 
 `pip install psutil pystray pillow`
 
-#### 下载探针脚本
+##### 下载探针脚本
 
 [cf-server-monitor.pyw](public/cf-server-monitor.pyw)
 
-#### 运行探针
+##### 运行探针
 
 双击`cf-server-monitor.pyw`文件即可启动探针。
 
-**参数说明：**
+#### PowerShell 版（推荐，零依赖）(开发中)
+
+### 参数说明
 
 | 参数               | 说明                      | 默认值    |
 | ---------------- | ----------------------- | ------ |
@@ -386,7 +390,13 @@ curl -sL https://你的项目.你的子域.workers.dev/install-alpine.sh | sh -s
 curl -sL https://你的项目.你的子域.workers.dev/install-openwrt.sh | sh -s uninstall
 ```
 
-Windows 系统
+Windows 系统（PowerShell 版）
+
+```powershell
+.\cf-server-monitor.ps1 uninstall
+```
+
+Windows 系统（Python 版）
 
 启动cf-server-monitor.pyw后，GUI中关闭自启动（如已开启）。点删除，再删除这个文件即可
 
@@ -532,7 +542,8 @@ Windows 系统
 ```
 CF-Server-Monitor/
 ├── public/
-│   ├── cf-server-monitor.pyw   # Windows 探针脚本（.pyw 不显示 CMD 窗口）
+│   ├── cf-server-monitor.ps1   # Windows 探针脚本（PowerShell 版，零依赖）
+│   ├── cf-server-monitor.pyw   # Windows 探针脚本（Python 版，带 GUI）
 │   ├── install.sh              # 一键安装脚本 - systemd 系统 (Ubuntu/Debian/CentOS)
 │   ├── install-alpine.sh       # 一键安装脚本 - OpenRC 系统 (Alpine Linux)
 │   ├── install-openwrt.sh      # 一键安装脚本 - procd 系统 (OpenWrt/LEDE)

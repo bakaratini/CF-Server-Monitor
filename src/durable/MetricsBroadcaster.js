@@ -57,7 +57,13 @@ export class MetricsBroadcaster {
       }
 
       const origin = request.headers.get('Origin');
-      // const allowedOrigins = parseAllowedOrigins(this.env.CORS_ALLOWED_ORIGINS);
+      const allowedOrigins = parseAllowedOrigins(this.env.CORS_ALLOWED_ORIGINS);
+
+      // Worker 转发时通过 X-Real-Origin 传递真实 origin，替代 DO 内部的 http://internal
+      const realOrigin = request.headers.get('X-Real-Origin') || `${url.protocol}//${url.host}`;
+      if (origin && allowedOrigins.length > 0 && !allowedOrigins.includes(origin) && origin !== realOrigin) {
+        return new Response('Forbidden', { status: 403 });
+      }
 
       const raw = url.searchParams.get('subscribe') || 'all';
       const scope = raw.trim().toLowerCase();
@@ -83,8 +89,12 @@ export class MetricsBroadcaster {
       }
 
       const responseHeaders = new Headers();
-      responseHeaders.set('Access-Control-Allow-Origin', origin || '*');
-      responseHeaders.set('Access-Control-Allow-Credentials', 'true');
+      if (origin && allowedOrigins.length > 0) {
+        responseHeaders.set('Access-Control-Allow-Origin', origin);
+        responseHeaders.set('Access-Control-Allow-Credentials', 'true');
+      } else if (allowedOrigins.length === 0) {
+        responseHeaders.set('Access-Control-Allow-Origin', '*');
+      }
 
       return new Response(null, {
         status: 101,

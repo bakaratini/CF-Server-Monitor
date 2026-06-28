@@ -170,8 +170,15 @@ export async function handleWebSocketUpgrade(request, env) {
   try {
     const id = env.METRICS_BROADCASTER.idFromName('global');
     const stub = env.METRICS_BROADCASTER.get(id);
-    // 使用原始 request 构造新的内部请求，保留 WebSocket 升级语义
-    return await stub.fetch(new Request(`http://internal/ws${qs}`, request));
+    const realOrigin = new URL(request.url).origin;
+    const headers = new Headers(request.headers);
+    headers.set('X-Real-Origin', realOrigin);
+    return await stub.fetch(new Request(`http://internal/ws${qs}`, {
+      method: request.method,
+      headers,
+      body: request.body,
+      redirect: request.redirect
+    }));
   } catch (e) {
     console.error('[ws] DO upgrade failed:', e);
     return new Response(JSON.stringify({ error: 'WebSocket error', code: 500 }), {

@@ -4,6 +4,7 @@ public/cf_probe.log
 public/cf_probe_config.json
 public/__pycache__/
 public/demo.css
+theme/
 
 # 依赖
 node_modules/
@@ -23,6 +24,7 @@ pnpm-lock.yaml
 *.swo
 *~
 .trae/
+.mimocode/
 
 # 日志
 *.log

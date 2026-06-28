@@ -1,6 +1,8 @@
 import { http, isAdminLoggedIn } from './http'
 import { getApiBases, getWsBase } from './config'
 import { ref } from 'vue'
+import { normalizeTimestamp } from './time.js'
+import { TIME } from './constants'
 
 export { getApiBases, getWsBase }
 
@@ -13,10 +15,8 @@ export const createLiveSocket = (subscribe, handlers = {}, apiIndex = 0) => {
   let ws = null
   let manualClose = false
   let reconnectTimer = null
-  let reconnectDelay = 1000
+  let reconnectDelay = TIME.RECONNECT_INITIAL_DELAY_MS
   let reconnectAttempts = 0
-  const MAX_DELAY = 30000
-  const MAX_RECONNECT_ATTEMPTS = 10
   const MAX_REPLAY_DELAY = 120000
   let isConnected = false
   const replayTimers = new Set()
@@ -48,9 +48,7 @@ export const createLiveSocket = (subscribe, handlers = {}, apiIndex = 0) => {
   }
 
   const normalizeReplayTimestamp = (value, fallback = Date.now()) => {
-    const ts = Number(value)
-    if (!Number.isFinite(ts) || ts <= 0) return fallback
-    return ts < 10000000000 ? ts * 1000 : ts
+    return normalizeTimestamp(value, fallback)
   }
 
   const emitUpdate = ({ serverId, data, ts }) => {
@@ -132,7 +130,7 @@ export const createLiveSocket = (subscribe, handlers = {}, apiIndex = 0) => {
     }
 
     ws.addEventListener('open', () => {
-      reconnectDelay = 1000
+      reconnectDelay = TIME.RECONNECT_INITIAL_DELAY_MS
       reconnectAttempts = 0
       setStatus(true, 'connected')
     })
@@ -171,7 +169,7 @@ export const createLiveSocket = (subscribe, handlers = {}, apiIndex = 0) => {
   const scheduleReconnect = () => {
     if (manualClose) return
     if (reconnectTimer) return
-    if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+    if (reconnectAttempts >= TIME.MAX_RECONNECT_ATTEMPTS) {
       setStatus(false, 'max reconnect attempts reached')
       return
     }
@@ -180,7 +178,7 @@ export const createLiveSocket = (subscribe, handlers = {}, apiIndex = 0) => {
       reconnectTimer = null
       reconnectAttempts++
       const delay = reconnectDelay
-      reconnectDelay = Math.min(reconnectDelay * 2, MAX_DELAY)
+      reconnectDelay = Math.min(reconnectDelay * 2, TIME.RECONNECT_MAX_DELAY_MS)
       setTimeout(connect, delay)
     }, 50)
   }
@@ -190,7 +188,7 @@ export const createLiveSocket = (subscribe, handlers = {}, apiIndex = 0) => {
   return {
     close() {
       manualClose = true
-      reconnectAttempts = MAX_RECONNECT_ATTEMPTS
+      reconnectAttempts = TIME.MAX_RECONNECT_ATTEMPTS
       clearReplayTimers()
       if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null }
       if (ws) { try { ws.close() } catch (_) {} ws = null }
@@ -223,6 +221,30 @@ export const formatBytes = (bytes) => {
   const i = Math.floor(Math.log(bytes) / Math.log(k))
   const safeIndex = Math.max(0, Math.min(i, sizes.length - 1))
   return parseFloat((bytes / Math.pow(k, safeIndex)).toFixed(2)) + ' ' + sizes[safeIndex]
+}
+
+export const getTrafficUsagePercent = (server) => {
+  const limit = parseFloat(server.traffic_limit) || 0
+  if (limit <= 0) return '0'
+
+  const limitBytes = limit * 1024 * 1024 * 1024
+  let usedBytes = 0
+
+  const calcType = server.traffic_calc_type || 'total'
+  if (calcType === 'dl') {
+    usedBytes = parseFloat(server.net_rx_monthly) || 0
+  } else if (calcType === 'ul') {
+    usedBytes = parseFloat(server.net_tx_monthly) || 0
+  } else {
+    usedBytes = (parseFloat(server.net_rx_monthly) || 0) + (parseFloat(server.net_tx_monthly) || 0)
+  }
+
+  return ((usedBytes / limitBytes) * 100).toFixed(1)
+}
+
+export const isServerOnline = (server, now = Date.now()) => {
+  const lastUpdated = normalizeTimestamp(server?.report_timestamp ?? server?.last_updated)
+  return lastUpdated && (now - lastUpdated) < TIME.ONLINE_THRESHOLD_MS
 }
 
 export const fetchServers = async () => {
@@ -326,7 +348,7 @@ export const logout = () => {
 }
 
 export const fetchConfig = async () => {
-  const result = await http.get('/api/config', { includeAuth: false, includeTurnstile: false })
+  const result = await http.get('/api/config', { includeAuth: true, includeTurnstile: false })
   if (result.error) return null
   if (result.data && result.data.version) {
     VERSION.value = result.data.version

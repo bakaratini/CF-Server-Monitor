@@ -239,8 +239,12 @@ export default {
           }
         }
 
+        const isLoggedIn = await checkAuth(request, env, sys);
+
         return createSuccessResponse({
           version: getCurrentVersion(),
+          is_public: sys.is_public === 'true',
+          authorization: isLoggedIn,
           turnstile_enabled: turnstileEnabled,
           turnstile_login_enabled: turnstileLoginEnabled,
           turnstile_site_key: sys.turnstile_site_key || '',

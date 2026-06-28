@@ -5,11 +5,11 @@ import './styles/main.css'
 import './styles/light.css'
 import { currentLang, translations } from './utils/i18n'
 import { http } from './utils/http'
-import { initConfig, getApiBases, getTitle, getBackgroundImage } from './utils/config'
+import { initConfig, getTitle, getBackgroundImage, hasMultipleApiBases, getApiBases } from './utils/config'
 import { VERSION } from './utils/api'
 
 const getTranslation = () => {
-  const lang = localStorage.getItem('language_preference') || 'en'
+  const lang = localStorage.getItem('language_preference') || 'zh'
   return translations[lang] || translations.en
 }
 
@@ -17,35 +17,23 @@ const trans = () => getTranslation()
 
 async function fetchConfig() {
   try {
-    const results = await http.getAll('/api/config', { includeAuth: false, includeTurnstile: true })
-    if (!results || results.length === 0) {
+    const result = await http.get('/api/config', { includeAuth: true, includeTurnstile: true })
+    if (result.error) {
       return { turnstile_enabled: false, turnstile_login_enabled: false, turnstile_site_key: '', version: '', verified: false }
     }
 
-    let turnstileEnabled = false
-    let turnstileLoginEnabled = false
-    let turnstileSiteKey = ''
-    let version = ''
-    let verified = false
-
-    for (const { data, error } of results) {
-      if (error || !data) continue
-      if (data.turnstile_enabled) {
-        turnstileEnabled = true
-      }
-      if (data.turnstile_login_enabled) {
-        turnstileLoginEnabled = true
-      }
-      if (data.turnstile_site_key && !turnstileSiteKey) {
-        turnstileSiteKey = data.turnstile_site_key
-      }
-      if (data.verified) {
-        verified = true
-      }
-      if (data.version && !version) {
-        version = data.version
-      }
+    const data = result.data
+    if (!data) {
+      return { turnstile_enabled: false, turnstile_login_enabled: false, turnstile_site_key: '', version: '', verified: false }
     }
+
+    const turnstileEnabled = data.turnstile_enabled === true
+    const turnstileLoginEnabled = data.turnstile_login_enabled === true
+    const turnstileSiteKey = data.turnstile_site_key || ''
+    const version = data.version || ''
+    const verified = data.verified === true
+    const isPublic = data.is_public !== false
+    const authorization = data.authorization === true
 
     if (version) {
       VERSION.value = version
@@ -56,7 +44,9 @@ async function fetchConfig() {
       turnstile_login_enabled: turnstileLoginEnabled,
       turnstile_site_key: turnstileSiteKey,
       version,
-      verified
+      verified,
+      is_public: isPublic,
+      authorization
     }
   } catch (e) {
     console.error('Failed to fetch config:', e)
@@ -138,14 +128,40 @@ async function initApp() {
     document.body.style.backgroundAttachment = 'fixed'
   }
 
-  const config = await fetchConfig()
+  const isMultipleMode = hasMultipleApiBases()
+  const isDashboard = window.location.hash === '' || window.location.hash === '#/' || window.location.hash === '#'
 
-  const isRemoteMode = getApiBases().length > 1
+  // 多站模式首页：一次 getAll 获取所有站点配置，检查 turnstile 并合并出当前站点配置
+  let config
+  if (isMultipleMode && isDashboard) {
+    try {
+      const results = await http.getAll('/api/config', { includeAuth: true, includeTurnstile: true })
+      const anyTurnstile = results.some(r => !r.error && r.data && r.data.turnstile_enabled)
+      if (anyTurnstile) {
+        showTurnstileUnsupported()
+        return
+      }
+      const first = results.find(r => !r.error && r.data)
+      config = first ? {
+        turnstile_enabled: first.data.turnstile_enabled === true,
+        turnstile_login_enabled: first.data.turnstile_login_enabled === true,
+        turnstile_site_key: first.data.turnstile_site_key || '',
+        version: first.data.version || '',
+        verified: first.data.verified === true,
+        is_public: first.data.is_public !== false,
+        authorization: first.data.authorization === true
+      } : { turnstile_enabled: false, turnstile_login_enabled: false, turnstile_site_key: '', version: '', verified: false, is_public: true, authorization: false }
+      if (config.version) VERSION.value = config.version
+    } catch (_) {
+      config = { turnstile_enabled: false, turnstile_login_enabled: false, turnstile_site_key: '', version: '', verified: false, is_public: true, authorization: false }
+    }
+  } else {
+    config = await fetchConfig()
+  }
 
   // 仅全局模式需要在启动时验证 Turnstile；登录模式在 Admin 页面的登录表单中验证
   if (config.turnstile_enabled) {
-    if (isRemoteMode) {
-      // Remote mode does not support Turnstile - show notice and stop
+    if (isMultipleMode) {
       showTurnstileUnsupported()
       return
     }
@@ -193,6 +209,9 @@ async function initApp() {
   const app = createApp(App)
   app.use(router)
   app.mount('#app').$nextTick(() => {
+    if (!config.is_public && !config.authorization) {
+      router.push('/admin')
+    }
     const loading = document.getElementById('loading')
     if (loading) {
       setTimeout(() => {

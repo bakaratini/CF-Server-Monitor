@@ -1,10 +1,21 @@
 <template>
   <div>
-    <div v-if="isRemoteMode" class="remote-mode-disabled">
+    <div v-if="isMultipleMode" class="remote-mode-disabled">
       <div class="disabled-container">
-        <div class="disabled-icon">🔒</div>
+        <div class="disabled-icon">🔐</div>
         <h2 class="disabled-title">{{ trans.adminDisabled }}</h2>
         <p class="disabled-desc">{{ trans.adminDisabledDesc }}</p>
+        <div class="site-list">
+          <a
+            v-for="(base, index) in apiBases"
+            :key="index"
+            :href="base + '/#/admin'"
+            class="site-item"
+          >
+            <span class="site-index">[{{ index }}]</span>
+            <span class="site-url">{{ base }}</span>
+          </a>
+        </div>
         <router-link to="/" class="btn btn-primary mt-4">← {{ trans.backToDashboard }}</router-link>
       </div>
     </div>
@@ -720,7 +731,7 @@
           <div class="form-group">
             <label class="form-label">{{ trans.installCommand }}</label>
             <div class="cmd-input-wrapper" :class="{ copied: copiedCmd }">
-              <span class="cmd-prompt">$</span>
+              <span class="cmd-prompt">{{ targetOs === 'windows' ? 'PS' : '$' }}</span>
               <input type="text" readonly :value="getCustomInstallCommand()" class="cmd-input flex-1">
             </div>
           </div>
@@ -900,11 +911,12 @@ import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import TerminalHeader from '../components/TerminalHeader.vue'
 import Footer from '../components/Footer.vue'
 import { adminApi, login, logout as apiLogout, formatBytes, upgradeDatabase, rebuildDatabase, getFlagRegionCode, getApiBases } from '../utils/api'
-import { t, currentLang } from '../utils/i18n'
-import { translations } from '../utils/i18n'
+import { hasMultipleApiBases } from '../utils/config.js'
+import { t, currentLang, useTranslation } from '../utils/i18n'
 import { http } from '../utils/http'
+import { usePasswordVisibility } from '../composables/usePasswordVisibility'
 
-const trans = computed(() => translations[currentLang.value] || translations.en)
+const trans = useTranslation()
 
 const getMessage = (msg) => {
   if (typeof msg === 'string') {
@@ -923,9 +935,8 @@ const getUsagePercent = (used, limit) => {
 
 const currentOrigin = computed(() => window.location.origin)
 
-const isRemoteMode = computed(() => {
-  return getApiBases().length > 1
-})
+const isMultipleMode = computed(() => hasMultipleApiBases())
+const apiBases = getApiBases()
 
 const isLoggedIn = ref(false)
 const loginForm = ref({ username: '', password: '' })
@@ -975,21 +986,9 @@ const settings = ref({
 })
 const apiSecret = ref('')
 
-const passwordVisible = ref({
-  login: false,
-  tgBotToken: false,
-  tgChatId: false,
-  turnstileSecret: false,
-  cloudflareToken: false,
-  jwtSecret: false,
-  username: false,
-  password: false,
-  confirmPassword: false
-})
-
-const togglePassword = (field) => {
-  passwordVisible.value[field] = !passwordVisible.value[field]
-}
+const { visibility: passwordVisible, toggle: togglePassword } = usePasswordVisibility([
+  'login', 'tgBotToken', 'tgChatId', 'turnstileSecret', 'cloudflareToken', 'jwtSecret', 'password', 'confirmPassword'
+])
 
 const showEditModal = ref(false)
 const editResetDayRef = ref(null)
@@ -1085,6 +1084,8 @@ const checkLoginStatus = () => {
 }
 
 const initAdmin = async () => {
+  if (hasMultipleApiBases()) return
+
   const hasCreds = checkLoginStatus()
   if (hasCreds) {
     isLoggedIn.value = true
@@ -1101,7 +1102,7 @@ const initAdmin = async () => {
 
 const loadTurnstileConfig = async () => {
   try {
-    const result = await http.get('/api/config', { includeAuth: false, includeTurnstile: false })
+    const result = await http.get('/api/config', { includeAuth: true, includeTurnstile: true })
     if (!result.error) {
       const config = result.data
       turnstileEnabled.value = config.turnstile_enabled === true || config.turnstile_enabled === 'true'
@@ -1359,6 +1360,23 @@ const getCustomInstallCommand = () => {
   const HOST = getApiBases()[0]
   if (targetOs.value === 'windows') {
     return `${HOST}/cf-server-monitor.pyw`
+    const params = [
+      'install',
+      `-Id '${copyServerId.value}'`,
+      `-Secret '${apiSecret.value}'`,
+      `-Url '${HOST}/update'`,
+      `-CollectInterval ${collectInterval.value}`,
+      `-ReportInterval ${reportInterval.value}`,
+      `-PingType ${pingMode.value}`,
+      `-ResetDay ${resetDay.value ?? 1}`
+    ]
+    if (customCt.value) params.push(`-CtNode '${customCt.value}'`)
+    if (customCu.value) params.push(`-CuNode '${customCu.value}'`)
+    if (customCm.value) params.push(`-CmNode '${customCm.value}'`)
+    if (customBd.value) params.push(`-BdNode '${customBd.value}'`)
+    if (rxCorrection.value && rxCorrection.value !== '') params.push(`-RxCorrection ${rxCorrection.value}`)
+    if (txCorrection.value && txCorrection.value !== '') params.push(`-TxCorrection ${txCorrection.value}`)
+    return `irm ${HOST}/cf-server-monitor.ps1 -OutFile cf-server-monitor.ps1; powershell -ExecutionPolicy Bypass -File .\\cf-server-monitor.ps1 ${params.join(' ')}`
   }
   const shell = targetOs.value === 'alpine' || targetOs.value === 'openwrt' ? 'sh' : 'bash'
   const script = targetOs.value === 'alpine' ? 'install-alpine.sh'
