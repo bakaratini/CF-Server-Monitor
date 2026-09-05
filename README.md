@@ -1,7 +1,6 @@
 2.8.5
 THANKGOD
 
-
 <div align="center">
 
 # CF-Server-Monitor
